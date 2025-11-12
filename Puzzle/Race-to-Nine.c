@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#define MAX_WORD_SIZE 50
+#define MAX_WORD_SIZE 10
 
 typedef struct {
     char **words;
