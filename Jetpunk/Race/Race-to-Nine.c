@@ -4,9 +4,10 @@
 
     A partir de uma string com as letras que o puzzle te dá, o programa passa por todos anagramas possíveis da palavra,
     o programa original printava todas as combinações, porém era muito cansativo ter que ir olhando por tantas palavras.
-    Por isso, no arquivo "words_alpha.txt" do repositório @https://github.com/dwyl/english-words, é possível encontrar 
-    mais de 460 mil palavras em inglês. A ideia é simplesmente fazer os anagramas e ir checando no arquivo do dicionário.
-    Claramente isso toma muito custo computacional, sendo preferível parar em até palavras de 8 letras.
+    Por isso, no arquivo "dictionary.csv" do repositório @https://github.com/zeisler/scrabble, é possível encontrar
+    todas palavras em inglês válidas para o Scrabble, o que poupa o nosso tempo de palavras muito obscuras, além de que
+    o arquivo já foi filtrado, tirando todas palavras com menos de 3 letras e mais de 10. A ideia é simplesmente fazer
+    os anagramas e ir checando no arquivo do dicionário.
 */
 
 #include <stdio.h>
@@ -15,14 +16,31 @@
 #include <stdbool.h>
 
 #define MAX_WORD_SIZE 10
+#define HASH_SIZE 100000
+
+typedef struct HashNode {
+    char *word;
+    struct HashNode *next;
+} HashNode;
 
 typedef struct {
-    char **words;
+    HashNode **buckets;
     int size;
 } Dicionario;
 
+unsigned int hash(const char *str) {
+    unsigned int hash = 5381;
+    int c;
+    while((c = *str++)) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash % HASH_SIZE;
+}
+
 Dicionario carregaDicionario(const char *filename) {
     Dicionario dict = {NULL, 0};
+    dict.buckets = calloc(HASH_SIZE, sizeof(HashNode*));
+    
     FILE *file = fopen(filename, "r");
     if(!file) {
         perror("Erro ao abir dicionário");
@@ -30,15 +48,19 @@ Dicionario carregaDicionario(const char *filename) {
     }
 
     char buffer[MAX_WORD_SIZE];
-    while(fscanf(file, "%s", buffer) !=EOF) {
-        dict.size++;
-    }
+    while(fscanf(file, "%9s", buffer) != EOF) {
+        if(strlen(buffer) == 0) {
+            continue;
+        }
 
-    rewind(file);
-    dict.words = malloc(dict.size * sizeof(char *));
-    for(int i=0; i<dict.size; i++) {
-        fscanf(file, "%s", buffer);
-        dict.words[i] = strdup(buffer);
+        unsigned int index = hash(buffer);
+
+        HashNode *newNode = malloc(sizeof(HashNode));
+        newNode->word = strdup(buffer);
+        newNode->next = dict.buckets[index];
+        dict.buckets[index] = newNode;
+
+        dict.size++;
     }
 
     fclose(file);
@@ -46,12 +68,30 @@ Dicionario carregaDicionario(const char *filename) {
 }
 
 bool estaNoDicionario(Dicionario *dict, const char *word) {
-    for(int i=0; i< dict->size; i++) {
-        if(strcmp(dict->words[i], word)==0) {
+    unsigned int index = hash(word);
+    HashNode *current = dict->buckets[index];
+
+    while(current != NULL) {
+        if(strcmp(current->word, word) == 0) {
             return true;
         }
+        current = current->next;
     }
     return false;
+}
+
+void liberaDicionario(Dicionario *dict) {
+    for(int i=0; i<HASH_SIZE; i++) {
+        HashNode *current = dict->buckets[i];
+        
+        while(current != NULL) {
+            HashNode *temp = current;
+            current = current->next;
+            free(temp->word);
+            free(temp);
+        }
+    }
+    free(dict->buckets);
 }
 
 void swap(char *x, char*y) {
@@ -89,23 +129,21 @@ int main () {
     int i, tamanho;
     char palavra[MAX_WORD_SIZE];
 
-    scanf("%s", palavra);
+    scanf("%9s", palavra);
     printf("\n");
 
-    Dicionario dict = carregaDicionario("words_alpha.txt");
-    if(dict.words==NULL) {
+    Dicionario dict = carregaDicionario("words.txt");
+    if(dict.buckets == NULL) {
         printf("Dicionário não carregado");
         return 1;
     }
 
-    tamanho = strlen(palavra)-1;
+    tamanho = strlen(palavra);
     
-    anagramas(&dict, palavra, 0, tamanho);
-
-    for(i=0; i<dict.size; i++) {
-        free(dict.words[i]);
+    if(tamanho>0) {
+        anagramas(&dict, palavra, 0, tamanho-1);
     }
-    free(dict.words);
 
+    liberaDicionario(&dict);
     return 0;
 }
